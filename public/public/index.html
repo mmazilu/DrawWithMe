@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="lib/bootstrap/css/bootstrap.css" rel="stylesheet">
+    <script src="http://code.jquery.com/jquery-1.8.2.min.js"></script>
+    <script src="http://code.jquery.com/ui/1.8.2/jquery-ui.js"></script>
+    <script src="http://cdn.sockjs.org/sockjs-0.3.min.js"></script>
+    <script src="lib/bootstrap/js/bootstrap.js"></script>
+    <script type="text/javascript" src="lib/jscolor/jscolor.js"></script>
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.9.1/themes/base/jquery-ui.css" />
+    <!--link rel="stylesheet" href="/resources/demos/style.css" /-->
+    <script>
+    $(function() {
+        var conn = null;
+	    var pressed = false;
+	    var fixedPress = false;
+
+	    var ctx=document.getElementById('myCanvas').getContext("2d");
+	    var localX = 0;
+	    var localY = 0;
+
+        $(document).ready(function() {
+            connect();
+        });
+
+        function connect() {
+            disconnect();
+            conn = new SockJS('http://' + window.location.host + '/echo');
+
+            conn.onopen = function() {
+            update_ui();
+            $('#frmName').show();
+        };
+
+        conn.onmessage = function(e) {
+		  var tmpJson = JSON.parse(e.data);
+		  if (tmpJson.type == "drawStuff"){
+              drawStuff(tmpJson.obj);
+		  } else if (tmpJson.type == "event"){
+                if (tmpJson.value == "serverLeft"){
+                    alert("server closed connection");
+                }
+          } else if (tmpJson.type == "clientConnected"){
+              var aa= "<li id=\""+tmpJson.value+"\"><a href=\"#\">" +tmpJson.name+ "</a></li>";
+              $('#clients').append(aa);
+              $("#clients li").click(function() {
+                  kickClient($(this).attr('id'));
+              });
+
+          } else if (tmpJson.type == "clientLeft"){
+              $('#'+tmpJson.value).remove();
+          }
+        };
+
+        conn.onclose = function() {
+          conn = null;
+          update_ui();
+        };
+      }
+
+      function disconnect() {
+        if (conn != null) {
+          conn.close();
+          conn = null;
+          update_ui();
+        }
+      }
+
+        function drawStuff(obj) {
+            ctx.beginPath();
+            ctx.lineWidth = obj.line;
+            ctx.strokeStyle = '#'+obj.color;
+            ctx.globalAlpha = obj.transparency;
+            if (obj.type == "brush"){
+                ctx.lineCap = "round";
+                ctx.moveTo(obj.points.x1, obj.points.y1);
+                ctx.lineTo(obj.points.x2, obj.points.y2);
+                ctx.stroke();
+                return;
+            }
+            if (obj.type == "emptyCircle"){
+                ctx.arc(obj.x,obj.y,obj.rad,0,Math.PI*2,true);
+                ctx.stroke();
+                return;
+            }
+            if (obj.type == "transparentCircle"){
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.arc(obj.x,obj.y,obj.rad,0,Math.PI*2,true);
+                ctx.fill();
+                return;
+            }
+            if (obj.type == "emptyRectangle"){
+                ctx.rect(obj.x,obj.y,obj.w,obj.h);
+                ctx.stroke();
+                return;
+            }
+            if (obj.type == "transparentRectangle"){
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.fillRect(obj.x,obj.y,obj.w,obj.h);
+                ctx.stroke();
+                return;
+            }
+            if (obj.type == "clear"){
+                ctx.beginPath();
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.globalAlpha = 1;
+                ctx.fillRect(0,0,600,400);
+                ctx.stroke();
+                return;
+            }
+        }
+
+      function update_ui() {
+        if (conn == null || conn.readyState != SockJS.OPEN) {
+            $('#status').text('Socket is disconnected!! Please connect!!');
+            $('#status').removeClass('alert-success');
+            $('#status').addClass('alert-error');
+            $('#connect').text('Connect');
+            $('#frmName').hide();
+            $('#toolbar').hide();
+            $('#createCanvas').hide();
+            $('#joinLabel').hide();
+            $('#clientsLabel').hide();
+            $('#changeState').hide();
+            $('#canvas').hide();
+            $('#info').text('');
+            $("#canvases").find('li').remove();
+            ctx.clearRect(0, 0, 600, 400);
+            ctx.beginPath();
+        } else {
+            $('#status').text('SockJS connected using protocol: ' + conn.protocol);
+            $('#status').removeClass('alert-error');
+            $('#status').addClass('alert-success');
+            $('#connect').text('Disconnect');
+            $('#frmName').show();
+        }
+      }
+
+      $('#connect').click(function() {
+        if (conn == null) {
+          connect();
+        } else {
+          disconnect();
+        }
+
+        update_ui();
+        return false;
+      });
+
+      $('#setName').on('click', function() {
+            if ($('#text').val() == "") return false;
+            var text = { type: "setName", value: $('#text').val() };
+            conn.send(JSON.stringify(text));
+            $('#info').text('Connected as: '+ $('#text').val());
+            $('#frmName').hide();
+            $('#changeState').show();
+            $('#joinLabel').show();
+            $('#createCanvas').show();
+            getCanvasOwners();
+
+            return false;
+      });
+
+      $('#clearButton').on('click', function() {
+          ctx.beginPath();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.fillStyle = ctx.strokeStyle;
+          ctx.globalAlpha = 1;
+          ctx.fillRect(0,0,600,400);
+          ctx.stroke();
+          var text = { type: "drawStuff", obj: {  type: "clear" } };
+          conn.send(JSON.stringify(text));
+
+          return false;
+      });
+
+      $('#createCanvas').on('click', function() {
+        var text = { type: "createCanvas" };
+		$('#joinLabel').hide();
+		$('#clientsLabel').show();
+        $('#createCanvas').hide();
+        $('#changeState').hide();
+        $('#canvas').show();
+        $('#toolbar').show();
+          conn.send(JSON.stringify(text));
+        return false;
+      });
+
+      $('#myCanvas').on('mousemove', function(e) {
+		if (pressed){
+            ctx.beginPath();
+			x=e.clientX - 10;
+			y=e.clientY - 200;
+			ctx.moveTo(localX, localY);
+            ctx.lineCap = "round";
+            ctx.strokeStyle = '#'+$('#colorPick').val();
+            var obj = $("#toolSelector").find(".active")[0].value;
+            ctx.globalAlpha = $( "#slider-horizontal" ).slider( "value" ) /100;
+            ctx.lineWidth = $( "#line-slider-horizontal" ).slider( "value" );
+            ctx.lineTo(x,y);
+			ctx.stroke();
+
+			var text = { type: "drawStuff", obj: {  type: obj,
+                                                    points: {x1: localX, y1: localY, x2: x, y2: y},
+                                                    color: $('#colorPick').val(),
+                                                    transparency: $( "#slider-horizontal" ).slider( "value" ) /100,
+                                                    line: $( "#line-slider-horizontal" ).slider( "value" )
+                                                    }
+                        };
+			conn.send(JSON.stringify(text));
+
+			localX=x;
+			localY=y;
+		}
+        return false;
+      });
+	  
+      $('#myCanvas').on('mousedown', function(e) {
+          var obj = $("#toolSelector").find(".active")[0].value;
+          if (obj == "brush"){
+              pressed = true;
+          } else{
+              fixedPress = true;
+          }
+
+          localX = e.clientX - 10;
+          localY = e.clientY - 200;
+          ctx.moveTo(localX, localY);
+      });
+	  
+      $('#myCanvas').on('mouseup', function(e) {
+          if (pressed){
+              pressed = false;
+              return;
+          } else {
+              fixedPress = false;
+              ctx.beginPath();
+              x=e.clientX - 10;
+              y=e.clientY - 200;
+              ctx.lineCap = "round";
+              ctx.strokeStyle = '#'+$('#colorPick').val();
+              ctx.lineWidth = $( "#line-slider-horizontal" ).slider( "value" );
+              ctx.globalAlpha = $( "#slider-horizontal" ).slider( "value" ) / 100;
+
+              var obj = $("#toolSelector").find(".active")[0].value;
+
+              var text = { type: "drawStuff", obj: {  type: obj,
+                            color: $('#colorPick').val(),
+                            transparency: $( "#slider-horizontal" ).slider( "value" ) / 100,
+                            line: $( "#line-slider-horizontal" ).slider( "value" )
+                         }
+              };
+
+              if (obj == "transparentCircle" || obj == "transparentRectangle"){
+                  ctx.fillStyle = '#'+$('#colorPick').val();
+              }
+              if (obj == "transparentCircle"){
+                  var midX = Math.abs(localX - x)/2 + Math.min(localX,x);
+                  var midY = Math.abs(localY - y)/2 + Math.min(localY,y);
+                  var rad = Math.min(Math.abs(midX - x),Math.abs(midY - y));
+
+                  ctx.arc(midX,midY,rad,0,Math.PI*2,true);
+                  ctx.fill();
+                  text.obj.x = midX;
+                  text.obj.y = midY;
+                  text.obj.rad = rad;
+              }
+              if (obj == "emptyCircle"){
+                  var midX = Math.abs(localX - x)/2 + Math.min(localX,x);
+                  var midY = Math.abs(localY - y)/2 + Math.min(localY,y);
+                  var rad = Math.min(Math.abs(midX - x),Math.abs(midY - y));
+
+                  ctx.arc(midX,midY,rad,0,Math.PI*2,true);
+                  ctx.stroke();
+                  text.obj.x = midX;
+                  text.obj.y = midY;
+                  text.obj.rad = rad;
+              }
+              if (obj == "emptyRectangle"){
+                  ctx.rect(Math.min(localX,x),Math.min(localY,y),Math.abs(x-localX),Math.abs(y - localY));
+                  ctx.stroke();
+                  text.obj.x = localX;
+                  text.obj.y = localY;
+                  text.obj.w = Math.abs(x-localX);
+                  text.obj.h = Math.abs(y - localY);
+              }
+              if (obj == "transparentRectangle"){
+                  ctx.fillRect(localX,localY,Math.abs(x-localX),Math.abs(y - localY));
+                  ctx.stroke();
+                  text.obj.x = localX;
+                  text.obj.y = localY;
+                  text.obj.w = Math.abs(x-localX);
+                  text.obj.h = Math.abs(y - localY);
+              }
+              conn.send(JSON.stringify(text));
+          };
+      });
+
+      function joinCanvas(aa){
+          var text = { type: "joinCanvas", value: aa };
+          $('#createCanvas').hide();
+          $('#joinLabel').hide();
+          $('#changeState').hide();
+          $('#canvas').show();
+          $('#toolbar').show();
+          conn.send(JSON.stringify(text));
+      };
+
+        function kickClient(aa){
+            var text = { type: "kickClient", value: aa };
+            conn.send(JSON.stringify(text));
+        };
+
+
+        function getCanvasOwners(){
+          $.ajax({
+              url: 'getServers',
+              success: function(data) {
+                  if (data.canvasHolders.length == 0){
+                        $("#joinLabel").hide();
+                  } else {
+                      $("#joinLabel").show();
+                      for (var i=0 ; i< data.canvasHolders.length; i++){
+                          var aa= "<li id=\""+data.canvasHolders[i].id+"\"><a href=\"#\">" +data.canvasHolders[i].name+ "</a></li>";
+                          $('#canvases').append(aa);
+                      }
+                      $("#canvases li").click(function() {
+                          joinCanvas($(this).attr('id'));
+                      });
+                  }
+              }
+          });
+      }
+    });
+    $('.nav-tabs').button();
+    $(function() {
+        $( "#slider-horizontal" ).slider({
+            orientation: "horizontal",
+            range: "min",
+            min: 0,
+            max: 100,
+            value: 60,
+            slide: function( event, ui ) {
+                $( "#amount" ).val( ui.value );
+            }
+        });
+        $( "#amount" ).val( $( "#slider-horizontal" ).slider( "value" ) );
+    });
+    $(function() {
+        $( "#line-slider-horizontal" ).slider({
+            orientation: "horizontal",
+            range: "min",
+            min: 1,
+            max: 30,
+            value: 1,
+            slide: function( event, ui ) {
+                $( "#line-amount" ).val( ui.value );
+            }
+        });
+        $( "#line-amount" ).val( $( "#line-slider-horizontal" ).slider( "value" ) );
+    });
+</script>
+</head>
+<body>
+<ul style="position: absolute; left: 650px" type=none>
+    <li><h1>Draw with me</h1></li>
+    <li><div id="info" class="alert alert-info"></div><br></li>
+    <li><div id="status" class="alert alert-error">
+        Websocket is not connected. Please connect!!
+        </div>
+    </li>
+    <li><div id="clientsLabel" style="display: none">
+        <h5>Connected clients</h5>
+        <h5>Click to kick</h5><img src="img/wink.jpg" width="50"/>
+        <ul class="nav nav-tabs nav-stacked" id="clients" style="width: 150px;">
+        </ul>
+    </div>
+    </li>
+    <li><div class="btn-group" style="display: none" id="changeState">
+        <input type="button" id="createCanvas" value="Create Canvas" class="btn"/>
+        <h4>Or</h4>
+        </div>
+    </li>
+    <li><div id="joinLabel" style="display: none">
+        <h5>Join existing canvas</h5>
+        <ul class="nav nav-tabs nav-stacked" id="canvases" style="width: 150px;">
+        </ul>
+    </div>
+    </li>
+</ul>
+
+<div style="min-width: 1024px">
+    <a id="connect" href="#">Connect</a><br>
+</div>
+
+<div id="frmName" style="width:800px; margin: 100px 300px auto;; display: none;">
+    <form class="navbar-form pull-left" onsubmit="return false">
+        <input id="text" type="text" class="span2">
+        <button type="submit" class="btn" id="setName">Set Name</button>
+    </form>
+</div>
+
+<div id="canvas" width="600" height="400" style="overflow:auto; border: 1px solid black; float: left; display: none; position: absolute; left: 10px; top: 200px;">
+	<canvas id="myCanvas" width="600" height="400"></canvas>
+</div>
+
+
+<div id="toolbar" style="width: 600px; height: 160px; overflow:auto; border: 1px solid black; float: right; display: none; position: absolute; left: 10px; top: 20px;">
+    <div id="toolSelector" class="btn-group" data-toggle="buttons-radio" style="margin:10px">
+        <button type="button" class="btn active" value="brush">Brush</button>
+        <button type="button" class="btn" value="emptyCircle">Empty circle</button>
+        <button type="button" class="btn" value="transparentCircle">Filled circle</button>
+        <button type="button" class="btn" value="emptyRectangle">Empty rectangle</button>
+        <button type="button" class="btn" value="transparentRectangle">Filled rectangle</button>
+    </div>
+    <div style="margin-left: 10px">
+        Colour:
+        <input id="colorPick" class="color" value="000000" style="width: 60px;">
+    </div>
+    <div class="btn-group" style="margin:10px">
+        <button id="clearButton" type="button" class="btn">Clear Canvas</button>
+    </div>
+    <div style="float: left; margin-left: 10px">
+            <label for="amount">Transparency:</label>
+            <input type="text" id="amount" style="border: 0; color: #f6931f; font-weight: bold; width: 30px" disabled="disabled" />
+        <div id="slider-horizontal" style="height: 10px; width: 150px"></div>
+    </div>
+    <div style="float: left; margin-left: 30px">
+            <label for="line-amount">Line width:</label>
+            <input type="text" id="line-amount" style="border: 0; color: #f6931f; font-weight: bold; width: 30px" disabled="disabled"/>
+        <div id="line-slider-horizontal" style="height: 10px; width: 150px"></div>
+    </div>
+
+</div>
+</body>
+</html>
