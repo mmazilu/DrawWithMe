@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/node_modules/sockjs/examples/echo/Echo.iml" filepath="$PROJECT_DIR$/node_modules/sockjs/examples/echo/Echo.iml" />
+      <module fileurl="file://$PROJECT_DIR$/node_modules/sockjs/examples/express/Express.iml" filepath="$PROJECT_DIR$/node_modules/sockjs/examples/express/Express.iml" />
+      <module fileurl="file://$PROJECT_DIR$/node_modules/sockjs/examples/express-3.x/Express-3.x.iml" filepath="$PROJECT_DIR$/node_modules/sockjs/examples/express-3.x/Express-3.x.iml" />
+      <module fileurl="file://$PROJECT_DIR$/node_modules/sockjs/examples/multiplex/Multiplex.iml" filepath="$PROJECT_DIR$/node_modules/sockjs/examples/multiplex/Multiplex.iml" />
+      <module fileurl="file://$PROJECT_DIR$/public/Public.iml" filepath="$PROJECT_DIR$/public/Public.iml" />
+    </modules>
+  </component>
+</project>
+
